@@ -5,6 +5,11 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 const DEFAULT_SOURCE_URL =
   "https://www.binance.com/zh-CN/support/faq/detail/ea9bacf82b9e4ddfae50ebc98565241b";
 
+function toReadableProxyUrl(url: string): string {
+  const clean = url.replace(/^https?:\/\//, "");
+  return `https://r.jina.ai/http://${clean}`;
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -96,6 +101,9 @@ export function isBinanceKnowledgeQuestion(question: string): boolean {
 
 export async function syncSingleBinanceArticle(): Promise<{ chunks: number; sourceUrl: string }> {
   const sourceUrl = process.env.BINANCE_RAG_SOURCE_URL ?? DEFAULT_SOURCE_URL;
+  let html = "";
+  let title = "";
+  let text = "";
 
   const res = await fetch(sourceUrl, {
     headers: {
@@ -104,13 +112,30 @@ export async function syncSingleBinanceArticle(): Promise<{ chunks: number; sour
     cache: "no-store",
   });
 
-  if (!res.ok) {
-    throw new Error(`抓取币安帮助中心失败（HTTP ${res.status}）`);
+  if (res.ok) {
+    html = await res.text();
+    title = extractTitle(html);
+    text = stripHtml(html);
   }
 
-  const html = await res.text();
-  const title = extractTitle(html);
-  const text = stripHtml(html);
+  if (text.length < 200) {
+    const proxyRes = await fetch(toReadableProxyUrl(sourceUrl), {
+      cache: "no-store",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; CryptoVibeBot/1.0)",
+      },
+    });
+
+    if (!proxyRes.ok) {
+      throw new Error(
+        `抓取到的正文过短且代理抓取失败（原站HTTP ${res.status || "unknown"}，代理HTTP ${proxyRes.status}）。`,
+      );
+    }
+
+    const proxyText = await proxyRes.text();
+    title = title || "Binance Support (Proxy)";
+    text = proxyText.replace(/\s+/g, " ").trim();
+  }
 
   if (text.length < 200) {
     throw new Error("抓取到的正文过短，可能被反爬拦截。请稍后重试。");
