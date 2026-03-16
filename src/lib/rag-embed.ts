@@ -1,11 +1,24 @@
 const EMBEDDING_DIM = 256;
 
 function tokenize(text: string): string[] {
-  return text
+  const normalized = text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .trim();
+
+  const latinTokens = normalized
     .split(/\s+/)
     .filter((token) => token.length > 1);
+
+  // For CJK text (no spaces), add character bigrams to improve recall.
+  const cjkOnly = normalized.replace(/\s+/g, "");
+  const cjkChars = Array.from(cjkOnly).filter((char) => /[\p{Script=Han}]/u.test(char));
+  const cjkBigrams: string[] = [];
+  for (let i = 0; i < cjkChars.length - 1; i += 1) {
+    cjkBigrams.push(`${cjkChars[i]}${cjkChars[i + 1]}`);
+  }
+
+  return [...latinTokens, ...cjkChars, ...cjkBigrams];
 }
 
 function hashToken(token: string): number {

@@ -233,14 +233,33 @@ export async function retrieveBinanceChunks(question: string, limit = 5): Promis
   const { data, error } = await supabase.rpc("match_binance_kb_chunks", {
     query_embedding: queryEmbedding,
     match_count: limit,
-    match_threshold: 0.1,
+    match_threshold: -1,
   });
 
   if (error) {
     throw new Error(`检索知识库失败：${error.message}。请确认已执行 docs/supabase-rag.sql`);
   }
 
-  return (data ?? []) as RAGChunk[];
+  const rows = (data ?? []) as RAGChunk[];
+  if (rows.length > 0) {
+    return rows;
+  }
+
+  // Safety fallback: return latest chunks if similarity retrieval returns empty.
+  const { data: fallbackRows, error: fallbackError } = await supabase
+    .from("binance_kb_chunks")
+    .select("id,article_url,article_title,chunk_index,content")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (fallbackError) {
+    throw new Error(`检索兜底失败：${fallbackError.message}`);
+  }
+
+  return (fallbackRows ?? []).map((row) => ({
+    ...(row as Omit<RAGChunk, "similarity">),
+    similarity: 0,
+  }));
 }
 
 function buildFallbackAnswer(question: string, chunks: RAGChunk[]): string {
