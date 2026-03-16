@@ -6,26 +6,43 @@ const DEFAULT_SOURCE_URL =
   "https://www.binance.com/zh-CN/support/faq/detail/ea9bacf82b9e4ddfae50ebc98565241b";
 
 const FALLBACK_SEED_TEXT = `
-以下为币安帮助中心单文档RAG演示种子内容（用于抓取失败时的流程验证）：
-1) 2FA 重置：
-如果用户无法使用原验证器，需要在登录页面进入“无法使用双重验证”，按流程提交身份验证与安全校验。
-重置期间可能触发短期提币限制，系统会提示具体时间窗口。用户应确保设备安全并完成邮箱/手机验证。
+幣安帶單用戶分潤及反佣（發布於 2023-08-22 12:13）
+帶單用戶可以獲得：最高30%跟單用戶的分潤，以及10%跟單用戶的手續費返佣。
 
-2) 提币限额：
-提币额度通常与账户认证等级、风控状态、币种网络、以及近期安全操作相关。
-若出现限额变化，优先检查身份认证状态、是否触发风控、以及账户安全设置是否完整。
+請知悉：
+每週分潤機制於2024年9月23日更新，分潤計算由原先基於已實現盈虧的規則調整為基於總盈虧。
+系統將於東八區時間每週一8:00 AM開始進行跟單項目總盈虧快照。
+每週分潤僅在快照時帶單項目未實現盈虧大於 -20,000 USDT 進行結算。
+當跟單項目可用餘額低於分潤金額時不進行分潤，返佣不受影響。
+在每週一分潤計算結束之前，新開始的跟單項目可能會被收取分潤。
+分潤將於每週一自動分發，劃轉到帶單用戶的幣安現貨錢包。
 
-3) 合约风控规则：
-合约交易受保证金率、杠杆倍数、维持保证金、风险限额档位等参数影响。
-当账户风险升高，可能出现减仓、强平或限制开仓。用户应关注仓位风险与保证金比例。
+帶單員每週一可以獲得未結束跟單項目的交易手續費返佣。
+每週10%手續費返佣獎勵有上限設置，系統於每週一08:00（東八區時間）開始進行跟單項目保證金餘額快照。
+獎勵上限為 Min[跟單項目手續費 * 10%, 跟單項目保證金餘額 * 3% * 10%]。
 
-4) 复制交易/跟单：
-跟单可能存在滑点、延迟、风控差异与市场波动风险，历史收益不代表未来表现。
-跟单前应查看带单员风险指标，并设定止损、最大回撤和仓位上限。
+除此以外，當出現以下情況時，也會進行分潤分發：
+跟單用戶停止跟單；
+帶單用戶結束投資組合；
+跟單用戶提取盈利。
 
-5) 安全建议：
-启用防钓鱼码、独立邮箱密码、设备管理与登录提醒，避免在未知链接输入账号信息。
-如遇异常登录或资产异动，应立即冻结相关操作并联系官方支持。
+分潤計算公式：
+待分潤金額 = Max[(投資組合總實現盈利 + 投資組合未實現盈利) * 分潤比例 - 已分潤金額, 0]
+
+如何計算跟單投資組合的分潤金額：
+分潤金額是根據整個投資組合的盈虧統計，系統會計算每個跟單投資組合的總盈利。
+
+示例（初始跟單金額 1,000 USDT，分潤比例 10%）：
+第一週：PNL變化 +200，累計PNL +200，總分潤金額 20，已分潤金額 0，待分潤金額 20。
+第二週：PNL變化 -150，累計PNL +50，總分潤金額 5，已分潤金額 20，待分潤金額 0。
+第三週：PNL變化 +100，累計PNL +150，總分潤金額 15，已分潤金額 20，待分潤金額 0。
+第四週：PNL變化 +150，累計PNL +300，總分潤金額 30，已分潤金額 20，待分潤金額 10。
+
+說明：
+PNL變化指當週已實現和未實現的總盈虧；
+累計PNL指該跟單投資組合當前的已實現和未實現總盈虧；
+累計盈利已扣除了所有產生的費用；
+第二週和第三週的總分潤金額小於已分潤金額，因此這兩週的待分潤金額為 0。
 `;
 
 function toReadableProxyUrl(url: string): string {
@@ -43,10 +60,15 @@ function stripHtml(html: string): string {
 }
 
 function splitToChunks(text: string, maxLen = 520): string[] {
-  const segments = text
-    .split(/[。！？\n]/)
+  const normalized = text
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n");
+
+  const segments = normalized
+    .split(/[。！？；\n]/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 20);
+    .filter((line) => line.length > 8);
 
   const chunks: string[] = [];
   let current = "";
@@ -66,7 +88,10 @@ function splitToChunks(text: string, maxLen = 520): string[] {
     chunks.push(current);
   }
 
-  return chunks.slice(0, 40);
+  return chunks
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 20)
+    .slice(0, 80);
 }
 
 function extractTitle(html: string): string {
@@ -165,7 +190,7 @@ export async function syncSingleBinanceArticle(): Promise<{ chunks: number; sour
     text = FALLBACK_SEED_TEXT.replace(/\s+/g, " ").trim();
   }
 
-  const chunks = splitToChunks(text);
+  const chunks = splitToChunks(text, 220);
   if (chunks.length === 0) {
     throw new Error("未能从文章提取有效段落。");
   }
