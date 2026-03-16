@@ -10,7 +10,7 @@ function getGeminiConfig() {
 
   return {
     apiKey,
-    model: process.env.GEMINI_MODEL ?? "gemini-2.0-flash-lite",
+    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
   };
 }
 
