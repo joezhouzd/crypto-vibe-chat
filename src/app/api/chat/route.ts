@@ -4,6 +4,7 @@ import { generateAnalysis } from "@/lib/analyzer";
 import { resolveCoinFromText } from "@/lib/coins";
 import { fetchCoinMarketSnapshot, fetchCoinTrend7d } from "@/lib/coingecko";
 import { fetchCoinNews } from "@/lib/news";
+import { answerWithBinanceRAG, isBinanceKnowledgeQuestion } from "@/lib/rag";
 
 export async function POST(req: Request) {
   try {
@@ -12,6 +13,16 @@ export async function POST(req: Request) {
 
     if (!question) {
       return NextResponse.json({ error: "请输入问题" }, { status: 400 });
+    }
+
+    if (isBinanceKnowledgeQuestion(question)) {
+      const rag = await answerWithBinanceRAG(question);
+      return NextResponse.json({
+        mode: "binance_rag",
+        analysis: rag.answer,
+        sources: rag.sources,
+        generatedAt: new Date().toISOString(),
+      });
     }
 
     const coin = resolveCoinFromText(question);

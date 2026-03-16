@@ -8,6 +8,7 @@
 - CoinGecko 实时数据：价格、24h 涨跌、市值、成交量、7日趋势
 - 新闻数据：CryptoPanic（优先）/ NewsAPI（兜底）
 - Gemini 中文分析：结论、关键数据、新闻影响、风险点、观察位
+- Binance 帮助中心单文档 RAG（Supabase 向量检索）
 - 移动端适配 + 暗黑模式
 - 内存缓存（减少重复 API 请求）
 - 每日自动简报接口（Vercel Cron）
@@ -44,7 +45,20 @@ npm run dev
 3. 再测别名：`比特币今天风险点是什么`
 4. 再测错误分支：输入一个不支持币种，预期收到提示
 
-## 3) 常见修改
+## 3) Binance 单文档 RAG（你当前需求）
+1. 在 Supabase SQL Editor 执行 [docs/supabase-rag.sql](docs/supabase-rag.sql)
+2. 在 Vercel 环境变量新增：
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- （可选）`RAG_SYNC_SECRET`
+- （可选）`BINANCE_RAG_SOURCE_URL`
+3. 重新部署后，手动触发同步：
+- `POST /api/rag/sync`
+- 如果配了 `RAG_SYNC_SECRET`，带上 `Authorization: Bearer <RAG_SYNC_SECRET>`
+4. 在聊天提问币安问题（如“怎么重置2FA”），会自动走 RAG 检索回答
+
+## 4) 常见修改
 
 ### 增加支持币种
 编辑 `src/lib/coins.ts` 的 `SUPPORTED_COINS`，新增：
@@ -58,7 +72,7 @@ npm run dev
 ### 调整缓存时长
 编辑 `src/lib/coingecko.ts` 和 `src/lib/news.ts` 里的 TTL。
 
-## 4) 部署到 Vercel
+## 5) 部署到 Vercel
 
 ### 方式 A：网页最简单（推荐）
 1. 把代码推到 GitHub
@@ -81,13 +95,13 @@ vercel
 ```
 按提示登录并部署。
 
-## 5) 绑定自定义域名
+## 6) 绑定自定义域名
 1. Vercel 项目 -> `Settings` -> `Domains`
 2. 输入你的域名，例如 `chat.yourdomain.com`
 3. 按提示在域名服务商添加 DNS 记录（通常是 CNAME 指向 `cname.vercel-dns.com`）
 4. 等待生效后，Vercel 会显示 `Valid Configuration`
 
-## 6) 日报 Cron（可选）
+## 7) 日报 Cron（可选）
 项目已包含 `vercel.json`：每天会调用 `/api/daily-report`。
 如果你配置了 `CRON_SECRET`，请确保 cron 请求带 `Authorization: Bearer <CRON_SECRET>`。
 

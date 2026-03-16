@@ -17,6 +17,19 @@ type LocalMessage = {
 
 type ChatApiSuccess = {
   analysis: string;
+  snapshot?: {
+    currentPrice: number;
+    priceChange24hPct: number;
+    marketCap: number;
+    volume24h: number;
+  };
+  coin?: {
+    symbol: string;
+    name: string;
+  };
+};
+
+type MarketMeta = {
   snapshot: {
     currentPrice: number;
     priceChange24hPct: number;
@@ -39,7 +52,7 @@ export function ChatApp() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [marketMeta, setMarketMeta] = useState<ChatApiSuccess | null>(null);
+  const [marketMeta, setMarketMeta] = useState<MarketMeta | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([
     {
       id: crypto.randomUUID(),
@@ -82,7 +95,14 @@ export function ChatApp() {
         throw new Error(data.error || "请求失败");
       }
 
-      setMarketMeta(data);
+      if (data.snapshot && data.coin) {
+        setMarketMeta({
+          snapshot: data.snapshot,
+          coin: data.coin,
+        });
+      } else {
+        setMarketMeta(null);
+      }
       setMessages((prev) => [
         ...prev,
         {
